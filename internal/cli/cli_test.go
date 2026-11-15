@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -311,5 +312,25 @@ func TestRunErrors(t *testing.T) {
 		if h.exec.called {
 			t.Errorf("%s: exec called", tt.name)
 		}
+	}
+}
+
+func TestBackends(t *testing.T) {
+	op, bw := defaultBackends()
+	h := newHarness(t, op, bw)
+	if code := h.run("backends"); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	if !regexp.MustCompile(`(?m)^bw:// +ok +fake$`).MatchString(h.stdout.String()) {
+		t.Errorf("stdout:\n%s", h.stdout.String())
+	}
+
+	bw.Err = &backend.UnavailableError{Scheme: "bw", Reason: "locked"}
+	h = newHarness(t, op, bw)
+	if code := h.run("backends"); code != exitcode.Unavailable {
+		t.Errorf("exit %d, want 3", code)
+	}
+	if !regexp.MustCompile(`(?m)^bw:// +unavailable +bw: locked$`).MatchString(h.stdout.String()) {
+		t.Errorf("stdout:\n%s", h.stdout.String())
 	}
 }

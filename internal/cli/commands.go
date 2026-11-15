@@ -2,14 +2,20 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"io"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
+	"github.com/Reprazent/pmp/internal/backend"
 	"github.com/Reprazent/pmp/internal/envfile"
+	"github.com/Reprazent/pmp/internal/exitcode"
 	"github.com/Reprazent/pmp/internal/ref"
 )
 
@@ -173,5 +179,55 @@ func minArgs(n int) cobra.PositionalArgs {
 			return usagef("%s: expected at least %d argument(s)", cmd.Name(), n)
 		}
 		return nil
+	}
+}
+
+func newBackendsCommand(opts *Options) *cobra.Command {
+	return &cobra.Command{
+		Use:   "backends",
+		Short: "List backends and whether each one works",
+		Long: `List the registered schemes and whether each backend can be used: is its
+CLI installed, is it signed in or unlocked. Exits 3 if any backend is
+unavailable. Never prints secrets.`,
+		Args: exactArgs(0),
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			schemes := opts.Registry.Schemes()
+			statuses := make([]backend.Status, len(schemes))
+			var wg sync.WaitGroup
+			for i, s := range schemes {
+				b, _ := opts.Registry.Lookup(s)
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					ctx := cmd.Context()
+					if opts.Timeout > 0 {
+						var cancel context.CancelFunc
+						ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
+						defer cancel()
+					}
+					statuses[i] = b.Status(ctx)
+				}()
+			}
+			wg.Wait()
+
+			tw := tabwriter.NewWriter(opts.Stdout, 0, 4, 2, ' ', 0)
+			fmt.Fprintln(tw, "SCHEME\tSTATUS\tDETAIL")
+			allOK := true
+			for i, s := range schemes {
+				state := "ok"
+				if !statuses[i].Available {
+					state = "unavailable"
+					allOK = false
+				}
+				fmt.Fprintf(tw, "%s://\t%s\t%s\n", s, state, statuses[i].Detail)
+			}
+			if err := tw.Flush(); err != nil {
+				return err
+			}
+			if !allOK {
+				return &exitcode.ExitError{Code: exitcode.Unavailable}
+			}
+			return nil
+		},
 	}
 }

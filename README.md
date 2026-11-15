@@ -74,6 +74,20 @@ variables added to its environment (they override inherited ones). Secrets
 never go to stdout. The exit code is the command's. Flags after the command
 name belong to the command, so `--` is optional.
 
+### `pmp backends`
+
+```console
+$ pmp backends
+SCHEME  STATUS       DETAIL
+bw://   ok           locked as me@example.com; pmp will prompt to unlock
+op://   ok           cli: signed in as me@example.com
+```
+
+Lists every backend and whether it can be used right now. Exits 3 if any
+backend is unavailable, so `pmp backends >/dev/null && ...` works in scripts.
+It never prints secrets. Use `-v` with other commands to see which
+references go to which backend and how long each took.
+
 ### Replacing `auth-env`
 
 ```sh

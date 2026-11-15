@@ -104,7 +104,7 @@ or bw://GitHub/password. pmp never writes or stores secrets.`,
 	f.BoolVarP(&opts.Verbose, "verbose", "v", false, "log references and timings to stderr (never secret values)")
 	f.BoolVar(&opts.NoUnlock, "no-unlock", false, "never prompt to unlock a backend; fail instead")
 
-	root.AddCommand(newGetCommand(opts), newEnvCommand(opts), newRunCommand(opts))
+	root.AddCommand(newGetCommand(opts), newEnvCommand(opts), newRunCommand(opts), newBackendsCommand(opts))
 	return root
 }
 
