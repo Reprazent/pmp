@@ -81,7 +81,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "[ERROR] 2026/01/01 00:00:00 could not resolve secret reference %q: could not find item\n", missing)
 			os.Exit(1)
 		}
-		fmt.Print(out)
+		fmt.Println(out) // real op inject appends a newline
 	case "read":
 		if !signedIn {
 			notSignedIn()

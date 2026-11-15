@@ -226,6 +226,9 @@ func TestTemplateRoundTrip(t *testing.T) {
 	if got["op://a/b/c"] != "x\n<<pmp:abc:9>>" || got["op://d/e/f"] != "" {
 		t.Errorf("got %q", got)
 	}
+	if got, err := splitInjected(nonce, refs, out+"\n"); err != nil || got["op://a/b/c"] != "x\n<<pmp:abc:9>>" {
+		t.Errorf("trailing newline: got %q, %v", got, err)
+	}
 	if _, err := splitInjected(nonce, refs, "garbage"); err == nil {
 		t.Error("expected error for garbage output")
 	}

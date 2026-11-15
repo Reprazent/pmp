@@ -182,6 +182,8 @@ func splitInjected(nonce string, refs []string, out string) (map[string]string, 
 		values[refs[i]] = after[:end]
 		rest = after[end:]
 	}
+	// op inject (2.34.0 at least) appends a newline the template didn't have.
+	rest = strings.TrimRight(rest, "\r\n")
 	if rest != marker(nonce, len(refs)) {
 		return nil, fmt.Errorf("%s: unexpected `op inject` output", scheme)
 	}
