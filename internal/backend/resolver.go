@@ -118,7 +118,12 @@ func (r *Resolver) resolveBackend(ctx context.Context, b Backend, refs []ref.Ref
 		kept := refErrs[:0]
 		for _, e := range refErrs {
 			if errors.Is(e, ErrUnavailable) {
-				r.warnf("skipping %s", e)
+				var re *RefError
+				if errors.As(e, &re) {
+					r.warnf("skipping %s", e)
+				} else {
+					r.warnf("skipping %d %s:// reference(s): %s", len(refs)-len(vals), b.Scheme(), e)
+				}
 				continue
 			}
 			kept = append(kept, e)

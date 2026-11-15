@@ -93,6 +93,32 @@ A reference is `<scheme>://<path>[?<query>]`. Each backend defines its own
 path syntax (see below). Path segments are percent-decoded where a backend
 splits on `/`, so `%2F` is a literal slash in a name.
 
+### 1Password (`op://`)
+
+Same syntax as 1Password's own
+[secret references](https://developer.1password.com/docs/cli/secret-reference-syntax/),
+passed through unchanged:
+
+```
+op://<vault>/<item>[/<section>]/<field>[?attribute=otp]
+```
+
+pmp picks the first of these that applies:
+
+1. `OP_SERVICE_ACCOUNT_TOKEN` is set: the 1Password SDK with that service
+   account. Good for CI; service accounts can't see Personal/Private vaults.
+2. `PMP_OP_ACCOUNT` is set (account name or UUID, as in the app's sidebar):
+   the SDK through the desktop app, which asks for approval or Touch ID.
+   Turn on *Settings → Developer → Integrate with other apps*. If this fails
+   and `op` is installed, pmp warns and falls back to the CLI.
+3. `op` is on `PATH`: one `op inject` call for all references (with
+   `--account $PMP_OP_ACCOUNT` if set).
+4. Otherwise 1Password is unavailable (exit 3, or skipped with
+   `--skip-unavailable`).
+
+Desktop app integration needs a cgo build. Release binaries have it; a
+`CGO_ENABLED=0` build falls back to the `op` CLI.
+
 ### Bitwarden (`bw://`)
 
 Uses the [`bw` CLI](https://bitwarden.com/help/cli/) and your personal vault.
@@ -178,7 +204,13 @@ The file is picked in this order, for every command:
 
 ## Development
 
-Tools are pinned in `mise.toml`.
+Tools are pinned in `mise.toml`. Backend tests use fake `op` and `bw`
+executables, so they don't need accounts. To test against a real 1Password
+account:
+
+```sh
+PMP_INTEGRATION=1 PMP_TEST_OP_REF=op://Private/Some/field go test ./internal/backend/onepassword -run Integration
+```
 
 ```sh
 mise run test    # unit tests with -race
