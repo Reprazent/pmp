@@ -12,8 +12,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
       - run: mise run lint
 
   test:
@@ -23,8 +23,8 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
       - run: mise run test
       - run: mise run fuzz
         env:
@@ -38,8 +38,8 @@ jobs:
         cgo: ["0", "1"]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
       - run: go build -o /dev/null ./cmd/pmp
         env:
           CGO_ENABLED: ${{ matrix.cgo }}
@@ -47,7 +47,7 @@ jobs:
   formula:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Render formula with dummy checksums and syntax-check it
         run: |
           for t in darwin_arm64 darwin_amd64 linux_arm64 linux_amd64; do

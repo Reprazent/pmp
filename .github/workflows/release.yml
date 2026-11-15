@@ -30,13 +30,13 @@ jobs:
       tag: ${{ steps.release.outputs.new_release_git_tag }}
       prerelease: ${{ steps.release.outputs.new_release_channel != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - id: release
-        uses: cycjimmy/semantic-release-action@v4
+        uses: cycjimmy/semantic-release-action@v8
         with:
           semantic_version: 24
         env:
@@ -56,10 +56,10 @@ jobs:
           - { os: ubuntu-22.04-arm, goos: linux, goarch: arm64 }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.tag }}
-      - uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@v5
       - run: mise run test
       - name: Build
         env:
@@ -76,7 +76,7 @@ jobs:
           cp README.md dist/pkg/
           if [ -f LICENSE ]; then cp LICENSE dist/pkg/; fi
           tar -C dist/pkg -czf "dist/pmp_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz" .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pmp-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*.tar.gz
@@ -89,12 +89,12 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
       - run: cd dist && sha256sum *.tar.gz > checksums.txt
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/*.tar.gz
       - name: Attach binaries and publish the draft release
@@ -112,7 +112,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: main
       - name: Update formula
