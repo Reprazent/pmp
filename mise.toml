@@ -1,0 +1,19 @@
+[tools]
+go = "1.27.3"
+golangci-lint = "2.15.0"
+
+[tasks.build]
+description = "Build pmp into ./bin"
+run = "go build -trimpath -o bin/pmp ./cmd/pmp"
+
+[tasks.test]
+description = "Run unit tests"
+run = "go test -race -count=1 ./..."
+
+[tasks.lint]
+description = "Lint and check go.mod is tidy"
+run = ["golangci-lint run", "go mod tidy -diff"]
+
+[tasks.fuzz]
+description = "Run every fuzz target (FUZZTIME, default 30s each)"
+run = "scripts/fuzz.sh"

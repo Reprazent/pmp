@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - run: mise run lint
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - run: mise run test
+      - run: mise run fuzz
+        env:
+          FUZZTIME: 10s
+
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        cgo: ["0", "1"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - run: go build -o /dev/null ./cmd/pmp
+        env:
+          CGO_ENABLED: ${{ matrix.cgo }}
+
+  formula:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render formula with dummy checksums and syntax-check it
+        run: |
+          for t in darwin_arm64 darwin_amd64 linux_arm64 linux_amd64; do
+            echo "$(printf '0%.0s' {1..64})  pmp_0.0.0_${t}.tar.gz"
+          done > /tmp/checksums.txt
+          scripts/render-formula.sh 0.0.0 /tmp/checksums.txt > /tmp/pmp.rb
+          if grep -n '@[A-Za-z_0-9]*@' /tmp/pmp.rb; then exit 1; fi
+          ruby -c /tmp/pmp.rb

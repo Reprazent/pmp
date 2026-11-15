@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { os: macos-latest, goos: darwin, goarch: arm64 }
+          - { os: macos-15-intel, goos: darwin, goarch: amd64 }
+          # 22.04 keeps the glibc baseline low so the binary runs on older distros.
+          - { os: ubuntu-22.04, goos: linux, goarch: amd64 }
+          - { os: ubuntu-22.04-arm, goos: linux, goarch: arm64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: jdx/mise-action@v2
+      - run: mise run test
+      - name: Build
+        env:
+          CGO_ENABLED: "1"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist/pkg
+          go build -trimpath \
+            -ldflags "-s -w -X main.version=${version} -X main.commit=${GITHUB_SHA} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -o dist/pkg/pmp ./cmd/pmp
+          ./dist/pkg/pmp --version
+          cp README.md dist/pkg/
+          [ -f LICENSE ] && cp LICENSE dist/pkg/
+          tar -C dist/pkg -czf "dist/pmp_${version}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pmp-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: cd dist && sha256sum *.tar.gz > checksums.txt
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*.tar.gz
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=""
+          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" --generate-notes $prerelease dist/*
+
+  homebrew:
+    needs: release
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Update formula
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$GITHUB_REF_NAME" --pattern checksums.txt --dir /tmp
+          mkdir -p Formula
+          scripts/render-formula.sh "${GITHUB_REF_NAME#v}" /tmp/checksums.txt > Formula/pmp.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/pmp.rb
+          git commit -m "brew: pmp ${GITHUB_REF_NAME#v}"
+          git push origin main

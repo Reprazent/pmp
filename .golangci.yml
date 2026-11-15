@@ -1,0 +1,25 @@
+version: "2"
+
+linters:
+  enable:
+    - gosec
+    - revive
+  settings:
+    gosec:
+      excludes:
+        - G204 # running backend CLIs with variable args is the point of pmp
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters: [gosec, errcheck]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
