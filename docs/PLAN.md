@@ -218,7 +218,7 @@ jobs:
 - A nightly scheduled job runs the fuzzers for longer (5 min each) and
   uploads any new corpus entries as artifacts.
 
-### `.github/workflows/release.yml`: runs on tags `v*`
+### `.github/workflows/release.yml`: runs after CI passes on `main` (semantic-release, see below)
 
 cgo needs native builds, so the release uses GoReleaser's split/merge mode
 (`goreleaser release --split`, then `goreleaser continue --merge`). That
@@ -289,9 +289,11 @@ brew install reprazent/pmp/pmp
 - macOS binaries aren't signed or notarised in v0.1. Homebrew installs are
   fine; a direct download needs `xattr -d com.apple.quarantine`. Signing goes
   on the roadmap.
-- To cut a release: `git tag v0.1.0 && git push --tags`. Before v0.1.0, a
-  `v0.0.1-rc.1` tag tests the pipeline end to end (the workflow marks tags
-  with a `-` suffix as pre-releases and skips the Homebrew job for them).
+- **Update:** releases now use semantic-release (`.releaserc.json`). After
+  CI passes on `main`, it picks the version from conventional commits, tags
+  it and creates a draft release. The build jobs attach binaries and then
+  publish it. A `v0.0.0` tag on the first commit makes the first release
+  `v0.1.0`. The `beta` branch produces pre-releases, which skip Homebrew.
 
 ## Phase 6: v0.1.0
 

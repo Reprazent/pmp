@@ -235,8 +235,30 @@ mise run build   # ./bin/pmp
 
 ### Releasing
 
-Push a `v*` tag. The release workflow builds native cgo binaries for
-darwin and linux (amd64, arm64), publishes a GitHub release with checksums and
-build provenance, and commits the updated `Formula/pmp.rb` to `main`. Tags
-with a `-` (like `v0.1.0-rc.1`) become pre-releases and leave the formula
-alone.
+Releases are automatic, using
+[semantic-release](https://semantic-release.gitbook.io/) and
+[Conventional Commits](https://www.conventionalcommits.org/). Nobody tags by
+hand. After CI passes on `main`, the release workflow works out the next
+version from the commits since the last tag:
+
+| Commit | Release |
+|--------|---------|
+| `fix: ...`, `perf: ...` | patch |
+| `feat: ...` | minor |
+| `feat!: ...` or a `BREAKING CHANGE:` footer | major |
+| `docs:`, `chore:`, `test:`, `ci:`, `build:`, `refactor:` | none |
+
+It then tags `vX.Y.Z` and creates a draft GitHub release with generated
+notes. Native cgo builds for darwin and linux (amd64, arm64) are attached
+with checksums and build provenance, and the release is published. Finally it
+commits the updated `Formula/pmp.rb` to `main`.
+
+Pushing to a `beta` branch makes pre-releases (`vX.Y.Z-beta.N`), which skip
+the Homebrew formula. Config lives in `.releaserc.json`. The `v0.0.0` tag on
+the first commit is the baseline that makes the first release `v0.1.0`.
+
+To preview the next version locally:
+
+```sh
+npx semantic-release@24 --dry-run --no-ci --plugins @semantic-release/commit-analyzer
+```
