@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/Reprazent/pmp/internal/ref"
 )
 
 // Sentinel errors. Backends wrap these so callers can use errors.Is.
@@ -17,8 +19,9 @@ var (
 	ErrAmbiguous = errors.New("ambiguous reference")
 	// ErrTimeout means a backend call took longer than --timeout.
 	ErrTimeout = errors.New("timed out")
-	// ErrInvalidRef means a reference is syntactically wrong for its backend.
-	ErrInvalidRef = errors.New("invalid reference")
+	// ErrInvalidRef means a reference is syntactically wrong. It's the same
+	// error ref.Parse returns.
+	ErrInvalidRef = ref.ErrInvalid
 )
 
 // UnavailableError explains why a backend can't be used, with an optional

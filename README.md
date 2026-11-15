@@ -35,6 +35,39 @@ go install github.com/Reprazent/pmp/cmd/pmp@latest
 pmp [command] [flags]
 ```
 
+### References
+
+A reference is `<scheme>://<path>[?<query>]`. Each backend defines its own
+path syntax (see below). Path segments are percent-decoded where a backend
+splits on `/`, so `%2F` is a literal slash in a name.
+
+### Env files
+
+`pmp env` and `pmp run` read one env file, a subset of dotenv:
+
+```sh
+# comments allowed
+GITHUB_TOKEN="op://Personal/GitHub/token"
+AWS_ACCESS_KEY_ID="bw://AWS/access_key_id?folder=Work"
+EDITOR="nvim"                        # plain values pass through unchanged
+export FOO='op://Vault/Item/field'   # optional `export` prefix
+```
+
+- One `KEY=VALUE` per line. Keys match `[A-Za-z_][A-Za-z0-9_]*`.
+- Single quotes are literal. Double quotes understand `\\`, `\"`, `\n` and
+  `\$`. Unquoted values end at ` #` (a comment).
+- No variable interpolation.
+- If a key repeats, the last value wins.
+- A value is a reference only if it starts with a registered scheme followed
+  by `://`. Anything else, including unknown schemes like `https://`, is
+  passed through as is.
+
+The file is picked in this order, for every command:
+
+1. the file given on the command line,
+2. `$PMP_ENV_FILE`,
+3. `~/.authenticated-env`.
+
 ### Global flags
 
 | Flag | Description |
