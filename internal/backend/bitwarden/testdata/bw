@@ -1,0 +1,45 @@
+#!/bin/sh
+# Fake bw CLI for tests. Everything lives next to this script:
+#   status          "locked", "unlocked" or "unauthenticated"
+#   items.json, folders.json, collections.json, organizations.json
+#   calls.log       one line per invocation (args)
+#   env.log         environment of the last invocation
+# A session is valid when BW_SESSION is "good-session".
+dir=$(dirname "$0")
+echo "$*" >> "$dir/calls.log"
+env > "$dir/env.log"
+
+state=$(cat "$dir/status")
+if [ "$state" = locked ] && [ "${BW_SESSION:-}" = good-session ]; then
+  state=unlocked
+fi
+
+case "$1" in
+status)
+  printf '{"serverUrl":null,"lastSync":null,"userEmail":"me@example.com","status":"%s"}' "$state"
+  ;;
+unlock)
+  printf '? Master password: [input is hidden] ' >&2
+  read -r pw
+  if [ "$pw" = hunter2 ]; then
+    printf 'good-session'
+  else
+    echo "Invalid master password." >&2
+    exit 1
+  fi
+  ;;
+list)
+  case "$state" in
+  unauthenticated) echo "You are not logged in." >&2; exit 1 ;;
+  locked) echo "Vault is locked." >&2; exit 1 ;;
+  esac
+  cat "$dir/$2.json"
+  ;;
+get)
+  [ "$2" = totp ] && printf '123456'
+  ;;
+*)
+  echo "unknown command $1" >&2
+  exit 1
+  ;;
+esac

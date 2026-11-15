@@ -73,14 +73,28 @@ op://Work/AWS/credentials/access_key_id?attribute=otp
 ### 3.2 Bitwarden (`bw://`)
 
 ```
-bw://[<folder-or-collection>/]<item>/<field>
+bw://<item>/<field>[?folder=<name>|collection=<name>][&org=<name>]
+bw://<item>/<field>?id=<uuid>
+
 bw://GitHub/password
-bw://Work/AWS/access_key_id        # custom field
-bw://id/<uuid>/password            # lookup by item id
+bw://AWS/access_key_id?folder=Work # custom field, scoped to a folder
+bw://Anthropic/password?id=<uuid>  # lookup by item id
 ```
 
-`username`, `password`, `totp`, `notes` and `uri` are reserved field names.
-Any other field name is looked up in the item's custom fields.
+Bitwarden doesn't reserve any characters in names (folders even nest with
+`/`), so the path is always exactly `<item>/<field>` and the optional parts
+are query parameters. Segments and parameter values are percent-decoded, so
+`%2F` is a literal `/`.
+
+- `folder=` matches the folder's full name (`folder=Work/AWS` for nested
+  folders). `collection=` matches a collection name, and `org=` narrows
+  items and collections to one organization.
+- With `id=`, the item segment is only a readable label. If it no longer
+  matches the item's name, pmp warns but still returns the value.
+
+`username`, `password`, `totp`, `notes` and `uri` (the first URI) are
+reserved field names. Any other field name is looked up in the item's custom
+fields; linked fields follow their link.
 
 If a name matches more than one item, pmp fails with exit code 4 and lists the
 candidate ids rather than picking one.

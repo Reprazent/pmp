@@ -85,6 +85,14 @@ or bw://GitHub/password. pmp never writes or stores secrets.`,
 		Version:       fmt.Sprintf("%s (commit %s, built %s)", info.Version, info.Commit, info.Date),
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			cmd.SetContext(backend.WithSettings(cmd.Context(), backend.Settings{
+				NoUnlock: opts.NoUnlock,
+				Timeout:  opts.Timeout,
+				Warnf:    opts.Warnf,
+				Debugf:   opts.Debugf,
+			}))
+		},
 	}
 	root.SetOut(opts.Stdout)
 	root.SetErr(opts.Stderr)

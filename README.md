@@ -93,6 +93,41 @@ A reference is `<scheme>://<path>[?<query>]`. Each backend defines its own
 path syntax (see below). Path segments are percent-decoded where a backend
 splits on `/`, so `%2F` is a literal slash in a name.
 
+### Bitwarden (`bw://`)
+
+Uses the [`bw` CLI](https://bitwarden.com/help/cli/) and your personal vault.
+
+```
+bw://<item>/<field>[?folder=<name>|collection=<name>][&org=<name>]
+bw://<item>/<field>?id=<uuid>
+```
+
+```sh
+pmp get bw://GitHub/password
+pmp get bw://AWS/access_key_id?folder=Work      # custom field in folder "Work"
+pmp get "bw://AWS/password?folder=Work%2FInfra" # nested folder "Work/Infra"
+pmp get "bw://Shared/password?collection=Infra&org=Acme"
+pmp get bw://Anthropic/password?id=3f1c...      # by item id
+```
+
+- The path is always `<item>/<field>`. Write a `/` inside a name as `%2F`.
+- `username`, `password`, `totp`, `notes` and `uri` (the first URI) are
+  reserved. Any other name is a custom field.
+- `totp` returns the current code.
+- If a name matches several items, pmp exits 4 and lists their ids so you
+  can add `?id=`. With `?id=`, the item name is only a label; pmp warns if it
+  no longer matches.
+
+**Unlocking.** pmp uses `BW_SESSION` if it's set. Otherwise, if there's a
+terminal, it runs `bw unlock --raw` and asks for your master password on the
+terminal (this works inside `eval "$(pmp env)"` too). The session is kept in
+memory for that one run, so you get one prompt per `pmp` call. Without a
+terminal, or with `--no-unlock`, pmp exits 3. To avoid repeated prompts:
+
+```sh
+export BW_SESSION="$(bw unlock --raw)"
+```
+
 ### Env files
 
 `pmp env` and `pmp run` read one env file, a subset of dotenv:
