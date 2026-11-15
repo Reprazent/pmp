@@ -35,6 +35,58 @@ go install github.com/Reprazent/pmp/cmd/pmp@latest
 pmp [command] [flags]
 ```
 
+### `pmp get`
+
+```sh
+pmp get <reference>
+pmp get -n <reference>   # with a trailing newline
+```
+
+Prints one secret to stdout without a trailing newline, so it's safe in
+`$(...)` and pipes. Only the secret goes to stdout; warnings and errors go to
+stderr.
+
+### `pmp env`
+
+```sh
+eval "$(pmp env)"                         # sh/bash/zsh: export KEY='value'
+pmp env ~/.authenticated-env
+pmp env --format=dotenv ./deploy.env      # KEY="value"
+pmp env --format=json | jq .
+pmp env --skip-unavailable                # skip refs for missing/locked backends
+```
+
+Resolves every reference in an env file and prints the variables. Resolution
+is all or nothing: if a reference fails, nothing is printed and pmp exits
+non-zero. With `--skip-unavailable`, references whose backend isn't installed
+or unlocked are left out with a warning; a secret missing from a working
+backend still fails.
+
+### `pmp run`
+
+```sh
+pmp run -- terraform plan
+pmp run --env-file ./deploy.env --skip-unavailable -- ./deploy.sh
+```
+
+Resolves the env file and replaces itself with the command, with the
+variables added to its environment (they override inherited ones). Secrets
+never go to stdout. The exit code is the command's. Flags after the command
+name belong to the command, so `--` is optional.
+
+### Replacing `auth-env`
+
+```sh
+# ~/.authenticated-env holds references, not secrets
+GITLAB_TOKEN="op://Private/GitLab/token"
+ANTHROPIC_API_KEY="bw://Anthropic/password"
+```
+
+| Before              | With pmp                                         |
+|---------------------|--------------------------------------------------|
+| `. auth-env`        | `eval "$(pmp env --skip-unavailable)"`           |
+| `auth-env cmd args` | `pmp run --skip-unavailable -- cmd args`         |
+
 ### References
 
 A reference is `<scheme>://<path>[?<query>]`. Each backend defines its own

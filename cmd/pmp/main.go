@@ -18,9 +18,9 @@ var (
 )
 
 func main() {
-	opts := &cli.Options{}
+	opts := &cli.Options{Registry: registry()}
 	root := cli.NewRootCommand(cli.BuildInfo{Version: version, Commit: commit, Date: date}, opts)
-	err := root.Execute()
+	err := cli.Execute(root)
 	if err != nil {
 		var exit *exitcode.ExitError
 		if !errors.As(err, &exit) {
