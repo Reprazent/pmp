@@ -136,7 +136,8 @@ pmp get bw://Anthropic/password?id=3f1c...      # by item id
 
 The path is always `<item>/<field>`. `username`, `password`, `totp`, `notes`
 and `uri` (the first URI) are built-in fields, and `totp` gives you the
-current code. Any other field name is looked up in the item's custom fields.
+current code. On SSH key items, `private_key`, `public_key` and `fingerprint`
+read the key stored in the item. Any other field name is looked up in the item's custom fields.
 
 If a name matches more than one item, pmp exits 4 and lists their ids. Add
 `?id=` to pick one. With `?id=` the item name is just a label, and pmp warns
@@ -162,6 +163,7 @@ export BW_SESSION="$(bw unlock --raw)"
 GITHUB_TOKEN="op://Personal/GitHub/token"
 AWS_ACCESS_KEY_ID="bw://AWS/access_key_id?folder=Work"
 EDITOR="nvim"                        # plain values pass through unchanged
+pmp get -n "bw://me@example.com SSH key/private_key" | ssh-add -
 export FOO='op://Vault/Item/field'   # optional `export` prefix
 ```
 

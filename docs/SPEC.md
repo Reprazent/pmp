@@ -93,7 +93,8 @@ are query parameters. Segments and parameter values are percent-decoded, so
   matches the item's name, pmp warns but still returns the value.
 
 `username`, `password`, `totp`, `notes` and `uri` (the first URI) are
-reserved field names. Any other field name is looked up in the item's custom
+reserved field names, as are `private_key`, `public_key` and `fingerprint`
+for SSH key items (`sshKey.privateKey`, `.publicKey`, `.keyFingerprint`). Any other field name is looked up in the item's custom
 fields; linked fields follow their link.
 
 If a name matches more than one item, pmp fails with exit code 4 and lists the

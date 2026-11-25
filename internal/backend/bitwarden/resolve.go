@@ -29,6 +29,11 @@ type item struct {
 			URI *string `json:"uri"`
 		} `json:"uris"`
 	} `json:"login"`
+	SSHKey *struct {
+		PrivateKey  *string `json:"privateKey"`
+		PublicKey   *string `json:"publicKey"`
+		Fingerprint *string `json:"keyFingerprint"`
+	} `json:"sshKey"`
 	Fields []struct {
 		Name     string  `json:"name"`
 		Value    *string `json:"value"`
@@ -254,6 +259,22 @@ func (b *Backend) field(ctx context.Context, it item, name string) (string, erro
 			return notFound("notes")
 		}
 		return *it.Notes, nil
+	case fieldPrivateKey, fieldPublicKey, fieldFingerprint:
+		var v *string
+		if it.SSHKey != nil {
+			switch name {
+			case fieldPrivateKey:
+				v = it.SSHKey.PrivateKey
+			case fieldPublicKey:
+				v = it.SSHKey.PublicKey
+			default:
+				v = it.SSHKey.Fingerprint
+			}
+		}
+		if v == nil {
+			return notFound(name)
+		}
+		return *v, nil
 	case fieldURI:
 		if login == nil {
 			return notFound("uri")

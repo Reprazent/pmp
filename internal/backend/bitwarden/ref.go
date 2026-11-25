@@ -15,6 +15,11 @@ const (
 	fieldTOTP     = "totp"
 	fieldNotes    = "notes"
 	fieldURI      = "uri"
+
+	// SSH key items.
+	fieldPrivateKey  = "private_key"
+	fieldPublicKey   = "public_key"
+	fieldFingerprint = "fingerprint"
 )
 
 // query is a parsed bw:// reference:
