@@ -212,3 +212,10 @@ func (b *Backend) unlock(ctx context.Context) (string, error) {
 	}
 	return key, nil
 }
+
+// Cacheable reports whether r's value can be cached. TOTP codes change every
+// 30 seconds, so they can't.
+func (b *Backend) Cacheable(r ref.Ref) bool {
+	q, err := parseRef(r)
+	return err == nil && q.field != fieldTOTP
+}

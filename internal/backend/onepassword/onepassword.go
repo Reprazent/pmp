@@ -138,3 +138,17 @@ func (b *Backend) Status(ctx context.Context) backend.Status {
 	st.Detail = fmt.Sprintf("%s: %s", b.strategy.name(), st.Detail)
 	return st
 }
+
+// Cacheable reports whether r's value can be cached. One-time passwords
+// (?attribute=otp) change every 30 seconds, so they can't.
+func (b *Backend) Cacheable(r ref.Ref) bool {
+	q, err := r.Query()
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(q.Get("attribute")) {
+	case "otp", "totp":
+		return false
+	}
+	return true
+}

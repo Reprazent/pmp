@@ -13,6 +13,7 @@ import (
 
 	"github.com/Reprazent/pmp/internal/backend"
 	"github.com/Reprazent/pmp/internal/backend/fake"
+	"github.com/Reprazent/pmp/internal/cache"
 	"github.com/Reprazent/pmp/internal/exitcode"
 )
 
@@ -34,6 +35,7 @@ func newHarness(t *testing.T, backends ...backend.Backend) *harness {
 	h := &harness{env: map[string]string{"HOME": t.TempDir()}}
 	h.opts = &Options{
 		Registry: backend.NewRegistry(backends...),
+		Cache:    cache.NewMemory(),
 		Stdout:   &h.stdout,
 		Stderr:   &h.stderr,
 		Getenv:   func(k string) string { return h.env[k] },

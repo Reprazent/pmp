@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParse(t *testing.T) {
@@ -203,4 +204,47 @@ func FuzzDotenvRoundTrip(f *testing.F) {
 			t.Fatalf("round trip %q: got %#v", v, got)
 		}
 	})
+}
+
+func TestDirectives(t *testing.T) {
+	in := "# pmp: cache-ttl=8h\nA=1\n"
+	entries, dir, err := ParseWithDirectives(strings.NewReader(in), "f")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !dir.HasCacheTTL || dir.CacheTTL != 8*time.Hour || len(entries) != 1 {
+		t.Errorf("got %+v, %v", dir, entries)
+	}
+
+	for _, in := range []string{"#pmp:cache-ttl=30m", "  #  pmp:  cache-ttl = 30m ", "A=1\n# pmp: cache-ttl=30m"} {
+		_, dir, err := ParseWithDirectives(strings.NewReader(in), "f")
+		if err != nil || dir.CacheTTL != 30*time.Minute {
+			t.Errorf("%q: got %+v, %v", in, dir, err)
+		}
+	}
+
+	_, dir, err = ParseWithDirectives(strings.NewReader("# pmp: cache-ttl=0\n"), "f")
+	if err != nil || !dir.HasCacheTTL || dir.CacheTTL != 0 {
+		t.Errorf("explicit 0: got %+v, %v", dir, err)
+	}
+
+	_, dir, err = ParseWithDirectives(strings.NewReader("# just a comment about pmp: things\nA=1 # pmp: cache-ttl=1h\n"), "f")
+	if err != nil || dir.HasCacheTTL {
+		t.Errorf("ordinary comments: got %+v, %v", dir, err)
+	}
+}
+
+func TestDirectiveErrors(t *testing.T) {
+	for _, in := range []string{
+		"# pmp: cache-ttl=8h\n# pmp: cache-ttl=1h",
+		"# pmp: cache-tll=8h",
+		"# pmp: cache-ttl=forever",
+		"# pmp: cache-ttl=-1h",
+		"# pmp: cache-ttl",
+	} {
+		_, _, err := ParseWithDirectives(strings.NewReader(in), "f")
+		if !errors.Is(err, ErrSyntax) {
+			t.Errorf("%q: err = %v, want ErrSyntax", in, err)
+		}
+	}
 }

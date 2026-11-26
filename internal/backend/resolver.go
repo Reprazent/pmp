@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/Reprazent/pmp/internal/cache"
 	"github.com/Reprazent/pmp/internal/ref"
 )
 
@@ -18,6 +20,14 @@ type Resolver struct {
 	// SkipUnavailable drops references whose backend is unavailable instead
 	// of failing. Missing secrets in a working backend still fail.
 	SkipUnavailable bool
+	// Cache, when set together with a positive CacheTTL, serves cacheable
+	// references without asking their backend and stores fresh values.
+	Cache    cache.Store
+	CacheTTL time.Duration
+	// Refresh skips cache reads but still writes.
+	Refresh bool
+	// Now defaults to time.Now.
+	Now func() time.Time
 	// Warnf reports skipped references. May be nil.
 	Warnf func(format string, args ...any)
 	// Debugf logs progress. Never called with secret values. May be nil.
@@ -46,6 +56,8 @@ func (r *Resolver) Resolve(ctx context.Context, refs []ref.Ref) (map[string]stri
 		return nil, errs.ErrOrNil()
 	}
 
+	out := r.cacheLookup(ctx, groups)
+
 	type result struct {
 		values map[string]string
 		errs   []error
@@ -66,17 +78,152 @@ func (r *Resolver) Resolve(ctx context.Context, refs []ref.Ref) (map[string]stri
 	}
 	wg.Wait()
 
-	out := map[string]string{}
+	fresh := map[string]string{}
 	for _, res := range results {
 		errs = append(errs, res.errs...)
 		for k, v := range res.values {
 			out[k] = v
+			fresh[k] = v
 		}
 	}
+	// Store what did resolve even if something else failed, so a retry
+	// only has to fetch the failures.
+	r.cacheStore(ctx, groups, fresh)
 	if len(errs) > 0 {
 		return nil, errs.ErrOrNil()
 	}
 	return out, nil
+}
+
+func (r *Resolver) cacheEnabled() bool { return r.Cache != nil && r.CacheTTL > 0 }
+
+func (r *Resolver) now() time.Time {
+	if r.Now != nil {
+		return r.Now()
+	}
+	return time.Now()
+}
+
+// cacheCtx bounds one cache phase (lookup or store) by Timeout, like a
+// backend call, so a stuck Keychain can't hang pmp.
+func (r *Resolver) cacheCtx(ctx context.Context) (context.Context, context.CancelFunc) {
+	if r.Timeout > 0 {
+		return context.WithTimeout(ctx, r.Timeout)
+	}
+	return context.WithCancel(ctx)
+}
+
+// isOTPSeed reports whether v is an otpauth:// URI. Those hold the seed that
+// generates one-time passwords, like a 1Password OTP field read without
+// ?attribute=otp, so they're never cached, whatever the backend says.
+func isOTPSeed(v string) bool {
+	const scheme = "otpauth://"
+	v = strings.TrimSpace(v)
+	return len(v) >= len(scheme) && strings.EqualFold(v[:len(scheme)], scheme)
+}
+
+func (r *Resolver) cacheable(rf ref.Ref) bool {
+	b, ok := r.Registry.Lookup(rf.Scheme)
+	if !ok {
+		return false
+	}
+	c, ok := b.(Cacheable)
+	return ok && c.Cacheable(rf)
+}
+
+// cacheLookup returns cached values and removes them from groups (and drops
+// groups that end up empty), so their backends aren't asked at all.
+func (r *Resolver) cacheLookup(ctx context.Context, groups map[string][]ref.Ref) map[string]string {
+	out := map[string]string{}
+	if !r.cacheEnabled() || r.Refresh {
+		return out
+	}
+	ctx, cancel := r.cacheCtx(ctx)
+	defer cancel()
+	now := r.now()
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, group := range groups {
+		for _, rf := range group {
+			if !r.cacheable(rf) {
+				continue
+			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				e, ok, err := r.Cache.Get(ctx, rf.Raw)
+				switch {
+				case err != nil:
+					r.warnf("cache: reading %s: %v", rf.Raw, err)
+					return
+				case !ok:
+					r.debugf("cache: miss %s", rf.Raw)
+					return
+				case e.Expired(now):
+					r.debugf("cache: expired %s", rf.Raw)
+					return
+				}
+				r.debugf("cache: hit %s", rf.Raw)
+				mu.Lock()
+				out[rf.Raw] = e.Value
+				mu.Unlock()
+			}()
+		}
+	}
+	wg.Wait()
+
+	for scheme, group := range groups {
+		kept := group[:0]
+		for _, rf := range group {
+			if _, hit := out[rf.Raw]; !hit {
+				kept = append(kept, rf)
+			}
+		}
+		if len(kept) == 0 {
+			delete(groups, scheme)
+		} else {
+			groups[scheme] = kept
+		}
+	}
+	return out
+}
+
+// cacheStore writes freshly resolved, cacheable values. It waits for the
+// writes so they finish before pmp exits or execs.
+func (r *Resolver) cacheStore(ctx context.Context, groups map[string][]ref.Ref, fresh map[string]string) {
+	if !r.cacheEnabled() {
+		return
+	}
+	ctx, cancel := r.cacheCtx(ctx)
+	defer cancel()
+	expires := r.now().Add(r.CacheTTL)
+	var wg sync.WaitGroup
+	for _, group := range groups {
+		for _, rf := range group {
+			v, ok := fresh[rf.Raw]
+			if !ok || !r.cacheable(rf) {
+				continue
+			}
+			if isOTPSeed(v) {
+				r.debugf("cache: not caching %s, it's a one-time password seed", rf.Raw)
+				continue
+			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				err := r.Cache.Set(ctx, cache.Entry{Ref: rf.Raw, Value: v, Expires: expires})
+				switch {
+				case errors.Is(err, cache.ErrTooBig):
+					r.debugf("cache: %s is too big to cache", rf.Raw)
+				case err != nil:
+					r.warnf("cache: writing %s: %v", rf.Raw, err)
+				default:
+					r.debugf("cache: stored %s until %s", rf.Raw, expires.Format(time.RFC3339))
+				}
+			}()
+		}
+	}
+	wg.Wait()
 }
 
 func (r *Resolver) resolveBackend(ctx context.Context, b Backend, refs []ref.Ref) (map[string]string, []error) {

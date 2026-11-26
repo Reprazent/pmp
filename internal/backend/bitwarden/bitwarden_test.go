@@ -349,3 +349,18 @@ func TestStatus(t *testing.T) {
 		t.Errorf("missing bw: %+v", st)
 	}
 }
+
+func TestCacheable(t *testing.T) {
+	b := New()
+	for raw, want := range map[string]bool{
+		"bw://GitHub/password":      true,
+		"bw://GitHub/token?id=abc":  true,
+		"bw://GitHub/totp":          false,
+		"bw://GitHub/totp?org=Acme": false,
+		"bw://only-one-segment":     false,
+	} {
+		if got := b.Cacheable(parseRefs(t, raw)[0]); got != want {
+			t.Errorf("Cacheable(%s) = %v, want %v", raw, got, want)
+		}
+	}
+}

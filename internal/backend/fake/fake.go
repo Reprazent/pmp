@@ -22,6 +22,8 @@ type Backend struct {
 	Block bool
 	// PrepareErr is returned from Prepare.
 	PrepareErr error
+	// NoCache lists references (by Ref.Raw) that aren't cacheable.
+	NoCache map[string]bool
 
 	mu    sync.Mutex
 	Calls [][]string
@@ -35,6 +37,8 @@ func (b *Backend) Status(context.Context) backend.Status {
 	}
 	return backend.Status{Available: true, Detail: "fake"}
 }
+
+func (b *Backend) Cacheable(r ref.Ref) bool { return !b.NoCache[r.Raw] }
 
 func (b *Backend) Prepare(context.Context, []ref.Ref) error { return b.PrepareErr }
 

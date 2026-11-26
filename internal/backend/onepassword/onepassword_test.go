@@ -340,3 +340,17 @@ func TestIntegration(t *testing.T) {
 		t.Errorf("value mismatch for %s", r)
 	}
 }
+
+func TestCacheable(t *testing.T) {
+	b := New("test")
+	for raw, want := range map[string]bool{
+		"op://Private/GitHub/token":                    true,
+		"op://Private/GitHub/token?ssh-format=openssh": true,
+		"op://Private/GitHub/one-time?attribute=otp":   false,
+		"op://Private/GitHub/one-time?attribute=TOTP":  false,
+	} {
+		if got := b.Cacheable(parseRefs(t, raw)[0]); got != want {
+			t.Errorf("Cacheable(%s) = %v, want %v", raw, got, want)
+		}
+	}
+}

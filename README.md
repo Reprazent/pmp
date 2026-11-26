@@ -2,7 +2,8 @@
 
 pmp (the poor-man's proxy, or password manager proxy) reads secrets from
 1Password and Bitwarden with one reference syntax. It only reads. It can't
-write secrets, and it doesn't store or cache anything.
+write secrets. If you ask it to, it caches what it reads in the macOS
+Keychain for a while, because `op` and `bw` are slow (see [Caching](#caching)).
 
 The design is in [docs/SPEC.md](docs/SPEC.md).
 
@@ -85,6 +86,38 @@ Shows whether each backend works right now. It exits 3 if one doesn't, so
 went to which backend and how long it took, add `-v` to any other command.
 Neither prints secret values.
 
+### `pmp cache`
+
+```sh
+pmp cache list                     # references and expiry times, never values
+pmp cache clear                    # delete everything pmp cached
+pmp cache clear op://Private/X/y   # delete specific references
+```
+
+## Caching
+
+Caching is off until you set a TTL. pmp checks these in order and uses the
+first one it finds:
+
+1. `--cache-ttl 8h` on the command line
+2. a `# pmp: cache-ttl=8h` line in the env file (`env` and `run`)
+3. `$PMP_CACHE_TTL`
+
+A value of `0` turns caching off. Cached references skip their backend
+entirely, so a cached `bw://` reference doesn't ask you to unlock Bitwarden.
+Use `--refresh` to fetch fresh values (they still get cached), or
+`pmp cache clear` to drop them. TOTP codes are never cached, and neither are
+one-time password seeds (values starting with `otpauth://`) or errors.
+
+Values are stored as generic passwords in your login Keychain, under the
+service `pmp`. The account name is a SHA-256 hash of the reference, because
+the Keychain encrypts item data but not item names. That keeps ref names out
+of the file in plain text, but a guessable ref can still be confirmed by
+hashing it. Any process running as
+you can read these items while the login keychain is unlocked, and they only 
+get removed by `pmp` when invoked and the TTL has expired. 
+Caching only works on macOS for now.
+
 ## References
 
 A reference looks like `<scheme>://<path>[?<query>]`. The path syntax depends
@@ -132,6 +165,7 @@ pmp get bw://AWS/access_key_id?folder=Work      # custom field, folder "Work"
 pmp get "bw://AWS/password?folder=Work%2FInfra" # nested folder "Work/Infra"
 pmp get "bw://Shared/password?collection=Infra&org=Acme"
 pmp get bw://Anthropic/password?id=3f1c...      # by item id
+pmp get -n "bw://me@example.com SSH key/private_key" | ssh-add -
 ```
 
 The path is always `<item>/<field>`. `username`, `password`, `totp`, `notes`
@@ -163,7 +197,6 @@ export BW_SESSION="$(bw unlock --raw)"
 GITHUB_TOKEN="op://Personal/GitHub/token"
 AWS_ACCESS_KEY_ID="bw://AWS/access_key_id?folder=Work"
 EDITOR="nvim"                        # plain values pass through unchanged
-pmp get -n "bw://me@example.com SSH key/private_key" | ssh-add -
 export FOO='op://Vault/Item/field'   # optional `export` prefix
 ```
 
@@ -179,6 +212,10 @@ like `https://...`.
 When you don't name a file, pmp uses `$PMP_ENV_FILE`, and if that's unset,
 `~/.authenticated-env`. Every command follows the same order.
 
+A comment line `# pmp: cache-ttl=<duration>` sets the cache TTL for the file
+(see [Caching](#caching)). If pmp doesn't recognise a `# pmp:` setting, or it
+appears twice, the file is rejected.
+
 ## Global flags
 
 | Flag | Description |
@@ -187,6 +224,8 @@ When you don't name a file, pmp uses `$PMP_ENV_FILE`, and if that's unset,
 | `-q`, `--quiet` | Don't print warnings. |
 | `-v`, `--verbose` | Log references and timings to stderr. Never logs secret values. |
 | `--no-unlock` | Fail instead of prompting to unlock a backend. |
+| `--cache-ttl <dur>` | Cache resolved values for this long (default `$PMP_CACHE_TTL`, off). |
+| `--refresh` | Ignore cached values, but cache the fresh ones. |
 | `--version`, `--help` | |
 
 ## Exit codes
@@ -202,6 +241,12 @@ When you don't name a file, pmp uses `$PMP_ENV_FILE`, and if that's unset,
 
 When several references fail for different reasons, the code follows this
 priority: 2, 3, 5, 4, then 1.
+
+## Maybe later
+
+- Lock cached Keychain items to a codesigned pmp binary, so other processes
+  can't read them without a prompt. This needs cgo, the Security framework and
+  signing in CI.
 
 ## Development
 

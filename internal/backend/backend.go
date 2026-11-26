@@ -40,6 +40,13 @@ type Preparer interface {
 	Prepare(ctx context.Context, refs []ref.Ref) error
 }
 
+// Cacheable is implemented by backends whose values may be cached. Backends
+// that don't implement it are never cached. Values that change on their own,
+// like TOTP codes, must report false.
+type Cacheable interface {
+	Cacheable(r ref.Ref) bool
+}
+
 // Registry holds backends by scheme.
 type Registry struct {
 	mu       sync.RWMutex

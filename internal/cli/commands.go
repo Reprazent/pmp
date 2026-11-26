@@ -34,7 +34,11 @@ Only the secret goes to stdout; everything else goes to stderr.`,
 			if err != nil {
 				return usageErr(err)
 			}
-			values, err := opts.resolver(false).Resolve(cmd.Context(), []ref.Ref{r})
+			res, err := opts.resolver(false, envfile.Directives{})
+			if err != nil {
+				return err
+			}
+			values, err := res.Resolve(cmd.Context(), []ref.Ref{r})
 			if err != nil {
 				return err
 			}

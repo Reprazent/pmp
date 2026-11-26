@@ -36,7 +36,9 @@ ANTHROPIC_API_KEY="bw://API keys/Anthropic/password"
 ### Out of scope
 
 - Writing, creating, editing or deleting secrets.
-- Storing anything. pmp is not a password manager and doesn't cache secrets on disk.
+- Storing secrets as a source of truth. pmp is not a password manager. The
+  only thing it keeps is an opt-in, expiring cache of resolved values in the
+  macOS Keychain (see 5.5).
 - Its own login flows. Each backend's CLI or SDK session handles that.
 
 ## 2. Backends
@@ -137,6 +139,10 @@ export FOO='op://Vault/Item/field'   # optional `export` prefix
   value. No variable interpolation in v0.1.
 - A value counts as a reference only if it starts with a registered scheme
   (`^<scheme>://`). Anything else, unknown schemes included, is a literal.
+- A comment line of the form `# pmp: cache-ttl=<duration>` sets the cache TTL
+  for that file (see 5.5). It can appear anywhere in the file and applies to
+  every reference in it. Giving it twice is a usage error. Unknown
+  `# pmp:` keys are a usage error too, so typos don't go unnoticed.
 
 ```
 pmp env <file>                 # `export KEY='value'` lines, POSIX sh quoting
@@ -172,7 +178,21 @@ secrets.
   default. It lets one file work on a machine without 1Password, for example.
   A secret that's missing from a working backend still fails.
 - `--no-unlock`: never prompt to unlock a backend; fail instead (see 5.1).
+- `--cache-ttl <dur>`: cache resolved values for this long (see 5.5). `0`
+  turns the cache off.
+- `--refresh`: ignore cached values but still write fresh ones.
 - `--version`, `--help`.
+
+### 4.5 `cache`
+
+```
+pmp cache list           # refs and expiry times, never values
+pmp cache clear          # delete every cached value
+pmp cache clear <ref>... # delete specific values
+```
+
+`list` marks expired entries. `clear` with a ref that isn't cached is not an
+error.
 
 ## 5. Behaviour
 
@@ -217,7 +237,7 @@ at speed properly later.
   single `Secrets().ResolveAll` (results and errors per reference), or a
   single `op inject` in the fallback. For Bitwarden it's one `bw list items`,
   or one `bw get item` per unique item, and pmp picks the fields out itself.
-- Nothing is cached on disk.
+- Optionally, resolved values are cached in the macOS Keychain (see 5.5).
 
 Ideas for later: making the 1Password SDK the default path, keeping a
 `bw serve` (local REST API) running to skip Node's startup, or a short-lived
@@ -240,6 +260,91 @@ in-memory agent.
 | 3 | backend unavailable (CLI missing, locked, not signed in) |
 | 4 | secret not found, or ambiguous |
 | 5 | timeout |
+
+### 5.5 Cache
+
+`op` and `bw` take seconds per call, mostly startup and unlocking. The cache
+makes repeat calls take milliseconds. It's macOS only for now.
+
+**Turning it on.** The cache is off unless a TTL is set. There's no default
+TTL: turning the cache on means picking one. In order of precedence:
+
+1. `--cache-ttl <dur>` on the command line.
+2. `# pmp: cache-ttl=<dur>` in the env file (`env` and `run` only).
+3. `$PMP_CACHE_TTL`.
+
+The first one that's set wins, and `0` from any of them turns the cache off.
+The file beats the env var because it's more specific: the env var is a
+personal default, the file says how long these particular secrets may live.
+
+**Resolving.** The cache sits inside the Resolver:
+
+1. Remove duplicate refs.
+2. Look up each cacheable ref. A hit that hasn't expired is used as is.
+   With `--refresh`, skip this step.
+3. Send only the misses to the backends, grouped and in parallel as before.
+4. Write values that resolved successfully back with `expires = now + ttl`.
+
+Hits skip the backend completely, including `Prepare`. If everything a
+backend was asked for is cached, it doesn't matter whether it's installed or
+unlocked, so a cached Bitwarden ref never prompts for the master password.
+
+The cache never makes a call fail. If reading or writing it fails, pmp warns
+and uses the backend. An expired entry is treated as a miss and overwritten
+when the fresh value comes in.
+
+**What's not cached.**
+
+- Values that change on their own, like TOTP codes (`bw://<item>/totp`,
+  `op://...?attribute=otp`). Backends decide this through an optional
+  interface, `Cacheable(ref.Ref) bool`. A backend that doesn't implement it
+  is never cached, so new backends are safe by default.
+- One-time password seeds: any value that starts with `otpauth://`, ignoring
+  case and leading whitespace. This is the one check on the value rather
+  than the ref. It catches a 1Password OTP field read without
+  `?attribute=otp`, which returns the `otpauth://` URI, and seeds kept in
+  plain text fields. A seed generates codes forever, so it's worth more than
+  any code. pmp logs the skip with `-v`.
+- Errors and not-found results. There's no negative caching.
+
+**Storage.** Each value is a generic password item in the login Keychain:
+
+- service: `pmp`
+- account: hex SHA-256 of the raw reference
+- data: JSON `{"ref": "<raw ref>", "value": "<secret>", "expires": <unix seconds>}`
+
+The Keychain only encrypts item data. Attributes like service and account are
+stored in plain text in `~/Library/Keychains/login.keychain-db` and can be
+read from the file (or a backup of it) even while the keychain is locked. So
+the ref is hashed in the account and only stored in the clear inside the
+encrypted data. This only stops someone from reading a ref name straight out
+of the file. Refs are easy to guess (`op://Private/GitHub/token`), so anyone
+with the file can hash likely refs and check which ones are there. Treat which
+secrets you cache as visible to anyone who has the keychain file.
+`cache clear <ref>` hashes its argument. `cache list` reads
+the data, which works whenever the login keychain is unlocked.
+
+pmp talks to the Keychain by running `/usr/bin/security`. It needs no cgo, so
+the no-cgo build gets the cache too. Each call runs under a context and the
+process is killed when it's done, so `--timeout` covers the cache like a
+backend call: the lookups get one timeout, the writes another. A Keychain
+stuck behind an unlock dialog makes pmp warn and fall back to the backend;
+`pmp cache list` and `clear` exit 5. Writes go through `security -i` on stdin,
+so values never show up in argv. `security -i` takes lines of up to 4096
+bytes, and the value is JSON-encoded and then base64-encoded, so values over
+roughly 2.8 KB aren't cached. pmp logs that with `-v`.
+
+**Trade-offs.**
+
+- Items created by `security` trust `/usr/bin/security`, so any process
+  running as you can read them without a prompt while the login keychain is
+  unlocked. That's weaker than 1Password's Touch ID, and about as strong as
+  an exported `BW_SESSION`. That's why the cache is opt-in and has a TTL.
+  Restricting items to a codesigned pmp would fix this; see milestones.
+- The Keychain has no native expiry. Expired items stay until they're
+  overwritten or removed with `pmp cache clear`.
+- A secret that changes upstream is served stale until the TTL runs out.
+  `--refresh` or `pmp cache clear` gets the new one.
 
 ## 6. Architecture
 
@@ -285,6 +390,7 @@ internal/envfile/                 env file parser and output formats
 internal/backend/                 Backend interface and registry
 internal/backend/onepassword/
 internal/backend/bitwarden/
+internal/cache/                   Cache interface, Keychain implementation (darwin), no-op elsewhere
 internal/backend/keychain/        (later, build tag darwin)
 internal/backend/secretservice/   (later, build tag linux)
 ```
@@ -324,7 +430,10 @@ type Backend interface {
 2. v0.2: `backends` status command; fish and json output.
 3. v0.3: `keychain://` (macOS).
 4. v0.4: `secret-service://` (Linux).
-5. Later: speed (see 5.2), templating like `op inject` for config files, and
+5. Next: the Keychain cache (5.5).
+6. Later: restrict cache items to a codesigned pmp binary (needs cgo and the
+   Security framework, e.g. `keybase/go-keychain`, plus signing in CI);
+   a cache on Linux through Secret Service; speed (see 5.2), templating like `op inject` for config files, and
    more backends (pass, gopass, Vault, AWS Secrets Manager).
 
 ## 10. Decisions
@@ -339,3 +448,6 @@ type Backend interface {
   error, and callers like `auth-env` pass the flag when they want the lenient
   behaviour.
 - Speed waits until after v0.1.
+- The cache is opt-in with no default TTL, macOS only at first, and stores
+  hashed refs so ref names aren't stored in plain text. That doesn't hide
+  which secrets are cached from someone who can guess the refs.
