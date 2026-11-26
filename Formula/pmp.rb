@@ -2,27 +2,27 @@
 class Pmp < Formula
   desc "Read secrets from several password managers with one reference syntax"
   homepage "https://github.com/Reprazent/pmp"
-  version "0.2.0"
+  version "0.3.0"
 
   on_macos do
     on_arm do
-      url "https://github.com/Reprazent/pmp/releases/download/v0.2.0/pmp_0.2.0_darwin_arm64.tar.gz"
-      sha256 "9e665c863800a03480bf0cd9677ea6a4f606f65d6e5c81845c21de0978dfd6b1"
+      url "https://github.com/Reprazent/pmp/releases/download/v0.3.0/pmp_0.3.0_darwin_arm64.tar.gz"
+      sha256 "382770c54646dd640e0bc23c913fb84d83635c8871525667b9bdc31d408f8973"
     end
     on_intel do
-      url "https://github.com/Reprazent/pmp/releases/download/v0.2.0/pmp_0.2.0_darwin_amd64.tar.gz"
-      sha256 "6d589eb2a1bfb6955fcf182b938c0a3342b930e49cb07ede59afcb0d68700aba"
+      url "https://github.com/Reprazent/pmp/releases/download/v0.3.0/pmp_0.3.0_darwin_amd64.tar.gz"
+      sha256 "cf768af189eac6003a826b42371618a75e60e13e27dbb93c492dfe52206ebd1c"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/Reprazent/pmp/releases/download/v0.2.0/pmp_0.2.0_linux_arm64.tar.gz"
-      sha256 "d7dfc526059e1adc7f288eeccbf14395b152dcf7509ee8d064fa373fe6e36d37"
+      url "https://github.com/Reprazent/pmp/releases/download/v0.3.0/pmp_0.3.0_linux_arm64.tar.gz"
+      sha256 "f3fdc7b106c3b99c97b4dc79dc99140c413279c914e20a2127bb61a91f4acf4b"
     end
     on_intel do
-      url "https://github.com/Reprazent/pmp/releases/download/v0.2.0/pmp_0.2.0_linux_amd64.tar.gz"
-      sha256 "cc9f84475ccf1e3601cc302d87116a0879a207266c26dec2f89610f0ea1910c4"
+      url "https://github.com/Reprazent/pmp/releases/download/v0.3.0/pmp_0.3.0_linux_amd64.tar.gz"
+      sha256 "8b7cdcf7a044dd5ba026011687cd98ae327bd009c9d0b333770f0389ec84bf4e"
     end
   end
 
